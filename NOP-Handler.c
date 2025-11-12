@@ -22,14 +22,20 @@ struct Context {
 	struct NOPFile nopFiles[16];
 };
 
-struct BString {
+struct BCPLString {
 	UBYTE length;
 	UBYTE chars[];
 };
 
+struct SizedString {
+	unsigned length;
+	const char *chars;
+};
+
+
 struct ParseSizeResult {
 	uint64_t value;
-	unsigned charLength;
+	unsigned length;
 };
 
 static struct DosPacket *GetPacket(struct ExecBase *SysBase, struct MsgPort *port);
@@ -41,11 +47,10 @@ static unsigned GetNOPFilesOpen(struct Context *ctx);
 static struct NOPFile *GetNOPFile(struct Context *ctx, unsigned index);
 static unsigned GetNOPFileIndex(struct Context *ctx, struct NOPFile *nopFile);
 static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead);
-static const char *AfterDevice(const char *path);
-static struct ParseSizeResult ParseSize(const char *string);
+static struct SizedString AfterDevice(struct SizedString path);
+static struct ParseSizeResult ParseSize(struct SizedString size);
 
-
-const char Version[] = "$VER: NOP-Handler 0.1 (9.11.2025) by Patrik Axelsson";
+const char Version[] = "$VER: NOP-Handler 0.2 (12.11.2025) by Patrik Axelsson";
 
 void NOPHandler(struct ExecBase *SysBase) {
 	struct Process *process = (struct Process *) FindTask(NULL);
@@ -80,19 +85,15 @@ void NOPHandler(struct ExecBase *SysBase) {
 			case ACTION_FINDUPDATE: {
 					kprintf("Opening: '%b'\n", packet->dp_Arg3);
 					#ifdef AROS_FAST_BSTR
-					const char *path = BADDR(packet->dp_Arg3);
-					unsigned pathLength = strlen(path);
+					const char *cPath = BADDR(packet->dp_Arg3);
+					struct SizedString path = {strlen(cPath), cPath};
 					#else
-					struct BString *bPath = BADDR(packet->dp_Arg3);
-					unsigned pathLength = bPath->length;
-					char path[256];
-					CopyMem(bPath->chars, path, pathLength);
-					path[pathLength] = '\0';
+					struct BCPLString *bPath = BADDR(packet->dp_Arg3);
+					struct SizedString path = {bPath->length, bPath->chars};
 					#endif
-					const char *afterDevice = AfterDevice(path);
-					unsigned afterDeviceLength = pathLength - (afterDevice - path);
+					struct SizedString afterDevice = AfterDevice(path);
 					struct ParseSizeResult parseResult = ParseSize(afterDevice);
-					if (parseResult.charLength != afterDeviceLength) {
+					if (parseResult.length != afterDevice.length) {
 						ReplyPacket(SysBase, packet, handlerPort, DOSFALSE, ERROR_BAD_NUMBER);
 						break;
 					}
@@ -218,11 +219,11 @@ static unsigned GetNOPFileIndex(struct Context *ctx, struct NOPFile *nopFile) {
 	return nopFile - ctx->nopFiles;
 }
 
-static const char *AfterDevice(const char *path) {
-	const char *start = path;
+static struct SizedString AfterDevice(struct SizedString path) {
+	struct SizedString start = path;
 	char c;
-	while ((c = *path++) != '\0') {
-		if (c == ':') {
+	while (path.length--) {
+		if (*path.chars++ == ':') {
 			return path;
 		}
 	}
@@ -232,35 +233,29 @@ static const char *AfterDevice(const char *path) {
 /* Parses a string with a size consisting of a number followed by an optional
  * multyplying prefix 'K' (1024), 'M' (1048576) or G (1073741824).
  */
-static struct ParseSizeResult ParseSize(const char *string) {
-	const char *start = string;
+static struct ParseSizeResult ParseSize(struct SizedString size) {
 	uint32_t number = 0;
-	char c;
-	while ((c = *string++) != '\0') {
+	unsigned sizeLength;
+	unsigned shiftBits = 0;
+	for (sizeLength = 0; sizeLength < size.length; sizeLength++) {
+		char c = size.chars[sizeLength];
 		int digit = c - '0';
 		if (digit < 0 || digit > 9) {
+			switch (c) {
+				case 'G':
+					shiftBits += 10;
+				case 'M':
+					shiftBits += 10;
+				case 'K':
+					shiftBits += 10;
+					sizeLength++;
+			}
 			break;
 		}
 		number = number * 10 + digit;
 	}
-	unsigned charLength = string - start; // +1 too large here
-	char multiplier = c;
-	unsigned shiftBits = 0;
-	switch (multiplier) {
-		case 'K':
-			shiftBits = 10;
-			break;
-		case 'M':
-			shiftBits = 20;
-			break;
-		case 'G':
-			shiftBits = 30;
-			break;
-		default:
-			charLength--;
-	}
 	return (struct ParseSizeResult) {
 		.value = (uint64_t) number << shiftBits,
-		.charLength = charLength
+		.length = sizeLength
 	};
 }
