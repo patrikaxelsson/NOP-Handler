@@ -6,6 +6,7 @@
 #include <dos/filehandler.h>
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -14,7 +15,8 @@
 #include "Debug.h"
 
 struct NOPFile {
-	LONG type;
+	bool open;
+	bool unlimited;
 	uint64_t bytesLeft;
 };
 
@@ -41,7 +43,7 @@ struct ParseSizeResult {
 static struct DosPacket *GetPacket(struct ExecBase *SysBase, struct MsgPort *port);
 static void ReplyPacket(struct ExecBase *SysBase, struct DosPacket *packet, struct MsgPort *nextReplyPort, ULONG res1, ULONG res2);
 static void InitContext(struct Context *ctx);
-static struct NOPFile *OpenNOPFile(struct Context *ctx, LONG type, uint64_t size);
+static struct NOPFile *OpenNOPFile(struct Context *ctx, bool unlimited, uint64_t size);
 static void CloseNOPFile(struct NOPFile *nopFile);
 static unsigned GetNOPFilesOpen(struct Context *ctx);
 static struct NOPFile *GetNOPFile(struct Context *ctx, unsigned index);
@@ -50,7 +52,7 @@ static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead);
 static struct SizedString AfterDevice(struct SizedString path);
 static struct ParseSizeResult ParseSize(struct SizedString size);
 
-const char Version[] = "$VER: NOP-Handler 0.2 (12.11.2025) by Patrik Axelsson";
+const char Version[] = "$VER: NOP-Handler 0.3 (12.11.2025) by Patrik Axelsson";
 
 void NOPHandler(struct ExecBase *SysBase) {
 	struct Process *process = (struct Process *) FindTask(NULL);
@@ -98,7 +100,7 @@ void NOPHandler(struct ExecBase *SysBase) {
 						break;
 					}
 
-					struct NOPFile *nopFile = OpenNOPFile(&ctx, packet->dp_Type, parseResult.value);
+					struct NOPFile *nopFile = OpenNOPFile(&ctx, 0 == parseResult.length, parseResult.value);
 					if (NULL == nopFile) {
 						ReplyPacket(SysBase, packet, handlerPort, DOSFALSE, ERROR_NO_FREE_STORE);
 						break;
@@ -156,7 +158,7 @@ void NOPHandler(struct ExecBase *SysBase) {
 static void InitContext(struct Context *ctx) {
 	for (unsigned i = 0; i < ARRAY_SIZE(ctx->nopFiles); i++) {
 		struct NOPFile *nopFile = &ctx->nopFiles[i];
-		nopFile->type = 0;
+		nopFile->open = false;
 	}
 }
 
@@ -174,11 +176,12 @@ static void ReplyPacket(struct ExecBase *SysBase, struct DosPacket *packet, stru
 	PutMsg(toPort, linkedMessage);
 }
 
-static struct NOPFile *OpenNOPFile(struct Context *ctx, LONG type, uint64_t size) {
+static struct NOPFile *OpenNOPFile(struct Context *ctx, bool unlimited, uint64_t size) {
 	for (unsigned i = 0; i < ARRAY_SIZE(ctx->nopFiles); i++) {
 		struct NOPFile *nopFile = &ctx->nopFiles[i];
-		if (0 == nopFile->type) {
-			nopFile->type = type;
+		if (!nopFile->open) {
+			nopFile->open = true;
+			nopFile->unlimited = unlimited;
 			nopFile->bytesLeft = size;
 			return nopFile;
 		}
@@ -187,17 +190,20 @@ static struct NOPFile *OpenNOPFile(struct Context *ctx, LONG type, uint64_t size
 }
 
 static unsigned GetNOPFilesOpen(struct Context *ctx) {
-	unsigned used = 0;
+	unsigned opens = 0;
 	for (unsigned i = 0; i < ARRAY_SIZE(ctx->nopFiles); i++) {
 		struct NOPFile *nopFile = &ctx->nopFiles[i];
-		if (0 != nopFile->type) {
-			used++;
+		if (nopFile->open) {
+			opens++;
 		}
 	}
-	return used;
+	return opens;
 }
 
 static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead) {
+	if (nopFile->unlimited) {
+		return bytesToRead;
+	}
 	if (bytesToRead > nopFile->bytesLeft) {
 		bytesToRead = nopFile->bytesLeft;
 	}
@@ -207,7 +213,7 @@ static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead) {
 
 static void CloseNOPFile(struct NOPFile *nopFile) {
 	if (NULL != nopFile) {
-		nopFile->type = 0;	
+		nopFile->open = false;
 	}
 }
 
