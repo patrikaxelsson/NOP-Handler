@@ -1,6 +1,9 @@
 /NOP-Handler
-/NOP-Handler_debug
 /NOP-Handler.mos
 /NOP-Handler.os4
 /NOP-Handler.aros-i386
+/NOP-Handler_debug
+/NOP-Handler_debug.mos
+/NOP-Handler_debug.os4
+/NOP-Handler_debug.aros-i386
 *.*.swp

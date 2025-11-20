@@ -2,7 +2,7 @@
 	#ifdef __AROS__
 	#include <aros/debug.h>
 	#else
-	void kprintf(char *fmt, ...);
+	#include <clib/debug_protos.h>
 	#endif
 #else
 #define kprintf(...)
