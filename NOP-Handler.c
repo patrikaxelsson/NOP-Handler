@@ -48,11 +48,11 @@ static void CloseNOPFile(struct NOPFile *nopFile);
 static unsigned GetNOPFilesOpen(struct Context *ctx);
 static struct NOPFile *GetNOPFile(struct Context *ctx, unsigned index);
 static unsigned GetNOPFileIndex(struct Context *ctx, struct NOPFile *nopFile);
-static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead);
+static LONG ReadOrWriteNOPFile(struct NOPFile *nopFile, LONG bytesToReadOrWrite);
 static struct SizedString AfterDevice(struct SizedString path);
 static struct ParseSizeResult ParseSize(struct SizedString size);
 
-const char Version[] = "$VER: NOP-Handler 0.3 (12.11.2025) by Patrik Axelsson";
+const char Version[] = "$VER: NOP-Handler 1.0 (20.11.2025) by Patrik Axelsson";
 
 void NOPHandler(struct ExecBase *SysBase) {
 	struct Process *process = (struct Process *) FindTask(NULL);
@@ -120,16 +120,12 @@ void NOPHandler(struct ExecBase *SysBase) {
 					ReplyPacket(SysBase, packet, handlerPort, DOSTRUE, 0);
 				}
 				break;
-			case ACTION_READ: {
-					struct NOPFile *nopFile = GetNOPFile(&ctx, packet->dp_Arg1);
-					LONG bytesToRead = packet->dp_Arg3;
-					LONG bytesRead = ReadNOPFile(nopFile, bytesToRead);
-					ReplyPacket(SysBase, packet, handlerPort, bytesRead, 0);
-				}
-				break;
+			case ACTION_READ:
 			case ACTION_WRITE: {
-					LONG bytesToWrite = packet->dp_Arg3;
-					ReplyPacket(SysBase, packet, handlerPort, bytesToWrite, 0);
+					struct NOPFile *nopFile = GetNOPFile(&ctx, packet->dp_Arg1);
+					LONG bytesToReadOrWrite = packet->dp_Arg3;
+					LONG bytesReadOrWritten = ReadOrWriteNOPFile(nopFile, bytesToReadOrWrite);
+					ReplyPacket(SysBase, packet, handlerPort, bytesReadOrWritten, 0);
 				}
 				break;
 			case ACTION_DIE: {
@@ -200,15 +196,15 @@ static unsigned GetNOPFilesOpen(struct Context *ctx) {
 	return opens;
 }
 
-static LONG ReadNOPFile(struct NOPFile *nopFile, LONG bytesToRead) {
+static LONG ReadOrWriteNOPFile(struct NOPFile *nopFile, LONG bytesToReadOrWrite) {
 	if (nopFile->unlimited) {
-		return bytesToRead;
+		return bytesToReadOrWrite;
 	}
-	if (bytesToRead > nopFile->bytesLeft) {
-		bytesToRead = nopFile->bytesLeft;
+	if (bytesToReadOrWrite > nopFile->bytesLeft) {
+		bytesToReadOrWrite = nopFile->bytesLeft;
 	}
-	nopFile->bytesLeft -= bytesToRead;
-	return bytesToRead;
+	nopFile->bytesLeft -= bytesToReadOrWrite;
+	return bytesToReadOrWrite;
 }
 
 static void CloseNOPFile(struct NOPFile *nopFile) {
