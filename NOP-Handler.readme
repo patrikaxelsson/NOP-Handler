@@ -2,7 +2,7 @@ Short: Handler for instant reads and writes
 Author: Patrik Axelsson
 Uploader: patrik.bo@gmail.com
 Type: util/misc
-Architecture: m68k-amigaos >= 2.0.0; ppc-warpup >= 15.0.0; ppc-morphos >= 1.4.0; ppc-amigaos >= 4.0.0; i386-aros
+Architecture: m68k-amigaos >= 2.0.0; ppc-morphos >= 1.4.0; ppc-amigaos >= 4.0.0; i386-aros
 Version: 1.0
 URL: https://github.com/patrikaxelsson/NOP-Handler
 
