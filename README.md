@@ -2,7 +2,7 @@
 
 A handler which serves reads and writes instantly, without touching the data.
 Additionally, the size can be specified. This is useful for performance
-testing, as it can be used to remove the overhead of the underlaying I/O
+testing, as it can be used to remove the overhead of the underlying I/O
 solution.
 
 ## Installation
